@@ -1,0 +1,58 @@
+local module = {}
+
+local gradients = {}
+
+local function evalNumberSequence(sequence: NumberSequence, time: number)
+	if time == 0 then
+		return sequence.Keypoints[1].Value
+	elseif time == 1 then
+		return sequence.Keypoints[#sequence.Keypoints].Value
+	end
+
+	for i = 1, #sequence.Keypoints - 1 do
+		local currKeypoint = sequence.Keypoints[i]
+		local nextKeypoint = sequence.Keypoints[i + 1]
+		if time >= currKeypoint.Time and time < nextKeypoint.Time then
+			local alpha = (time - currKeypoint.Time) / (nextKeypoint.Time - currKeypoint.Time)
+			return currKeypoint.Value + (nextKeypoint.Value - currKeypoint.Value) * alpha
+		end
+	end
+end
+
+function module:Clip(gradient:UIGradient, ClipRatio:number, offset:number)
+	if gradients[gradient] == nil then return end
+	if ClipRatio >= 1 then gradient.Transparency = gradients[gradient] return end
+	
+	offset = offset or 0
+	
+	local newSequence = {}
+	ClipRatio = math.clamp(ClipRatio - offset, 0, 1)
+	local minTime = math.clamp(ClipRatio - 0.01, 0, 1)
+	local minValue = 0
+	
+	
+	for index,keypoint in ipairs(gradients[gradient].Keypoints) do
+		if keypoint.Time >= minTime then 
+			if keypoint.Value > minValue then
+				minValue = evalNumberSequence(gradients[gradient], minTime)
+			end
+			continue 
+		end
+		
+		newSequence[index] = keypoint
+	end
+	
+	
+	table.insert(newSequence, NumberSequenceKeypoint.new(minTime,minValue))
+	table.insert(newSequence, NumberSequenceKeypoint.new(ClipRatio,1))
+	table.insert(newSequence, NumberSequenceKeypoint.new(1,1))
+	
+	
+	gradient.Transparency = NumberSequence.new(newSequence)
+end
+
+function module:TrackGradient(gradient:UIGradient)
+	gradients[gradient] = gradient.Transparency
+end
+
+return module
